@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Falling Ball Game</title>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        background-color: #282c34;
+        overflow: hidden;
+      }
+
+      canvas {
+        border: 2px solid #fff;
+        background-color: #000;
+      }
+
+      .info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: white;
+        font-family: Arial, sans-serif;
+      }
+
+      .controls {
+        position: absolute;
+        bottom: 10px;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .control-button {
+        width: 80px;
+        height: 80px;
+        background-color: #444;
+        border: none;
+        border-radius: 10px;
+        color: white;
+        font-size: 18px;
+        font-family: Arial, sans-serif;
+        cursor: pointer;
+      }
+
+      .control-button:active {
+        background-color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="info">
+      <p>Score: <span id="score">0</span></p>
+      <p>Lives: <span id="lives">3</span></p>
+    </div>
+    <canvas id="gameCanvas" width="500" height="700"></canvas>
+    <div class="controls">
+      <button class="control-button" id="left">⬅️</button>
+      <button class="control-button" id="up">⬆️</button>
+      <button class="control-button" id="right">➡️</button>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+
+      const cols = 5;
+      const cellWidth = canvas.width / cols;
+      const cellHeight = 50;
+
+      const player = {
+        x: 2,
+        y: 13,
+        width: cellWidth * 0.5, // 플레이어 크기 줄임
+        height: cellHeight * 0.9, // 플레이어 크기 줄임
+        color: "blue",
+        isJumping: false,
+        verticalSpeed: 0,
+        jumpSpeed: -10,
+        horizontalSpeed: 0,
+        maxSpeed: 0.1, // 최대 속도를 낮춤
+        friction: 0.9, // 마찰로 속도 감소
+      };
+
+      let balls = [];
+      let score = 0;
+      let lives = 3;
+      let gravity = 5;
+      const jumpGravity = 0.5;
+      let isGameOver = false;
+
+      function drawRect(x, y, width, height, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, width, height);
+      }
+
+      function drawPlayer() {
+        drawRect(
+          player.x * cellWidth + (cellWidth - player.width) / 2, // 수평 정렬을 맞추기 위해 추가
+          player.y * cellHeight + (cellHeight - player.height) / 2, // 수직 정렬을 맞추기 위해 추가
+          player.width,
+          player.height,
+          player.color
+        );
+      }
+
+      function drawBalls() {
+        balls.forEach((ball) => {
+          drawRect(
+            ball.x * cellWidth,
+            ball.y,
+            ball.width,
+            ball.height,
+            ball.color
+          );
+        });
+      }
+
+      function spawnBall() {
+        const x = Math.floor(Math.random() * cols);
+        balls.push({
+          x: x,
+          y: 0,
+          width: cellWidth,
+          height: cellHeight,
+          color: "red",
+          resting: false,
+        });
+      }
+
+      function updateBalls() {
+        balls.forEach((ball, index) => {
+          if (!ball.resting) {
+            ball.y += gravity;
+          }
+
+          const ballRow = Math.floor(ball.y / cellHeight);
+          const ballColumn = ball.x;
+
+          // 플레이어와 공의 충돌 감지
+          const playerScreenX =
+            player.x * cellWidth + (cellWidth - player.width) / 2;
+          const playerScreenY =
+            player.y * cellHeight + (cellHeight - player.height) / 2;
+          const ballScreenX = ball.x * cellWidth;
+          const ballScreenY = ball.y;
+
+          // 충돌 박스 계산
+          const collision =
+            ballScreenX < playerScreenX + player.width &&
+            ballScreenX + ball.width > playerScreenX &&
+            ballScreenY < playerScreenY + player.height &&
+            ballScreenY + ball.height > playerScreenY;
+
+          // 충돌 시 처리
+          if (!ball.resting && collision) {
+            lives--; // 생명 감소
+            score += 10; // 점수 약간 상승
+            balls.splice(index, 1); // 충돌한 공 제거
+
+            if (lives <= 0) {
+              isGameOver = true;
+            }
+          }
+
+          // 기존 공 떨어뜨리는 로직 유지
+          if (ball.y + ball.height >= canvas.height) {
+            ball.y = canvas.height - ball.height;
+            ball.resting = true;
+          }
+
+          // 공들이 쌓이는 로직 유지
+          balls.forEach((otherBall) => {
+            if (
+              ball !== otherBall &&
+              !ball.resting &&
+              otherBall.resting &&
+              ballRow + 1 === Math.floor(otherBall.y / cellHeight) &&
+              ballColumn === otherBall.x
+            ) {
+              ball.y = otherBall.y - ball.height;
+              ball.resting = true;
+            }
+          });
+        });
+      }
+
+      function updatePlayerPosition() {
+        // 모든 공들을 순회하며 플레이어 이동 제한
+        for (let ball of balls) {
+          const ballScreenX = ball.x * cellWidth;
+          const ballScreenY = ball.y;
+
+          // 플레이어 화면 좌표 계산
+          const playerScreenX =
+            player.x * cellWidth + (cellWidth - player.width) / 2;
+          const playerScreenY =
+            player.y * cellHeight + (cellHeight - player.height) / 2;
+
+          // 화면 좌표 기준으로 충돌 감지
+          if (
+            ballScreenX < playerScreenX + player.width &&
+            ballScreenX + ball.width > playerScreenX &&
+            ballScreenY < playerScreenY + player.height &&
+            ballScreenY + ball.height > playerScreenY
+          ) {
+            // 공 위에 올라갔을 때, 수직 속도를 반전시키지 않고 멈추지 않도록 함
+            if (player.verticalSpeed > 0) {
+              player.verticalSpeed = 0; // 점프 중인 경우에는 수직 속도를 0으로 설정하지 않음
+            }
+
+            // 플레이어가 공 위에 정확히 앉도록 위치 조정
+            player.y = Math.floor(player.y); // 플레이어가 공 위에 정확히 앉을 수 있도록
+
+            // 공 위에서 점프 가능하도록 상태 설정
+            player.isJumping = false;
+
+            // 공이 떨어지지 않도록 설정
+            ball.resting = true;
+
+            break; // 첫 번째 충돌하는 공에서 멈춤
+          }
+        }
+
+        // 기존 점프 로직 유지
+        if (player.isJumping) {
+          player.verticalSpeed += jumpGravity;
+          player.y += player.verticalSpeed / cellHeight;
+
+          const belowRow = Math.floor(player.y + 1);
+          const ballBelow = balls.find(
+            (ball) =>
+              ball.resting &&
+              Math.floor(ball.y / cellHeight) === belowRow &&
+              ball.x === player.x
+          );
+
+          if (ballBelow || player.y >= 13) {
+            player.y = ballBelow ? belowRow - 1 : 13;
+            player.isJumping = false;
+            player.verticalSpeed = 0;
+          }
+        }
+
+        // 수평 이동 로직
+        if (player.horizontalSpeed !== 0) {
+          if (player.x <= 0 && player.horizontalSpeed < 0) {
+            player.horizontalSpeed = 0;
+          } else if (player.x >= cols - 1 && player.horizontalSpeed > 0) {
+            player.horizontalSpeed = 0;
+          }
+
+          player.x += player.horizontalSpeed;
+        }
+
+        // 플레이어 위치 제한
+        player.y = Math.min(Math.max(player.y, 0), 13);
+      }
+
+      function drawGameOver() {
+        ctx.fillStyle = "white";
+        ctx.font = "30px Arial";
+        ctx.fillText("Game Over", canvas.width / 2 - 75, canvas.height / 2);
+      }
+
+      function update() {
+        if (isGameOver) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        updatePlayerPosition();
+        drawPlayer();
+        drawBalls();
+        updateBalls();
+        document.getElementById("score").textContent = score;
+        document.getElementById("lives").textContent = lives;
+      }
+
+      function gameLoop() {
+        update();
+        if (!isGameOver) requestAnimationFrame(gameLoop);
+        else drawGameOver();
+      }
+
+      setInterval(spawnBall, 1000);
+
+      // 버튼 클릭 시 반응
+      function addControlEventListener(element, direction) {
+        element.addEventListener("mousedown", () => {
+          if (direction === "left" && player.x > 0) {
+            player.horizontalSpeed = -player.maxSpeed;
+          } else if (direction === "right" && player.x < cols - 1) {
+            player.horizontalSpeed = player.maxSpeed;
+          } else if (direction === "up" && !player.isJumping) {
+            player.isJumping = true;
+            player.verticalSpeed = player.jumpSpeed;
+          }
+        });
+
+        element.addEventListener("mouseup", () => {
+          player.horizontalSpeed = 0;
+        });
+
+        element.addEventListener("mouseleave", () => {
+          player.horizontalSpeed = 0;
+        });
+
+        // 터치 이벤트 처리
+        element.addEventListener("touchstart", (e) => {
+          e.preventDefault(); // 기본 동작 방지
+          if (direction === "left" && player.x > 0) {
+            player.horizontalSpeed = -player.maxSpeed;
+          } else if (direction === "right" && player.x < cols - 1) {
+            player.horizontalSpeed = player.maxSpeed;
+          } else if (direction === "up" && !player.isJumping) {
+            player.isJumping = true;
+            player.verticalSpeed = player.jumpSpeed;
+          }
+        });
+
+        element.addEventListener("touchend", () => {
+          player.horizontalSpeed = 0;
+        });
+
+        element.addEventListener("touchcancel", () => {
+          player.horizontalSpeed = 0;
+        });
+      }
+
+      addControlEventListener(document.getElementById("left"), "left");
+      addControlEventListener(document.getElementById("right"), "right");
+      addControlEventListener(document.getElementById("up"), "up");
+
+      // 키보드 이벤트 추가
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowLeft" && player.x > 0)
+          player.horizontalSpeed = -player.maxSpeed;
+        if (e.key === "ArrowRight" && player.x < cols - 1)
+          player.horizontalSpeed = player.maxSpeed;
+        if (e.key === "ArrowUp" && !player.isJumping) {
+          player.isJumping = true;
+          player.verticalSpeed = player.jumpSpeed;
+        }
+      });
+
+      document.addEventListener("keyup", (e) => {
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          player.horizontalSpeed = 0;
+        }
+      });
+
+      gameLoop();
+    </script>
+  </body>
+</html>
